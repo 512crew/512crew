@@ -4,6 +4,7 @@ const axios = require('axios');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const twilio = require('twilio');
 const moment = require('moment');
+const fs = require('fs');
 
 const app = express();
 const port = process.env.PORT || 8080;
@@ -25,7 +26,7 @@ const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID);
 async function accessSpreadsheet() {
   await doc.useServiceAccountAuth({
     client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    private_key: fs.readFileSync('/etc/secrets/google-private-key.pem', 'utf8'),
   });
   await doc.loadInfo();
   return doc.sheetsByIndex[0]; // Assuming the first sheet
@@ -120,4 +121,5 @@ app.post('/generate-coupon', async (req, res) => {
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
+
 
