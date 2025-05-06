@@ -17,7 +17,7 @@ const twilioClient = twilio(
   process.env.TWILIO_ACCOUNT_SID,
   process.env.TWILIO_AUTH_TOKEN
 );
-const twilioNumber = process.env.TWILIO_PHONE_NUMBER;
+const twilioNumber = process.env.TWILIO_PHONE_NUMBER || '+18665804414';
 
 // Google Sheets configuration
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID);
@@ -113,6 +113,7 @@ app.post('/generate-coupon', async (req, res) => {
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
+
 
 
 
