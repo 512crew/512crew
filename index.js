@@ -29,28 +29,20 @@ async function accessSpreadsheet() {
     private_key: fs.readFileSync('/etc/secrets/google-private-key.pem', 'utf8'),
   });
   await doc.loadInfo();
-  return doc.sheetsByIndex[0]; // Assuming the first sheet
+  return doc.sheetsByIndex[0];
 }
 
-// Helper function to format phone numbers to E.164
 function formatPhoneNumber(phone) {
   const cleaned = ('' + phone).replace(/\D/g, '');
-  if (cleaned.length === 10) {
-    return '+1' + cleaned;
-  } else if (cleaned.length === 11 && cleaned.startsWith('1')) {
-    return '+' + cleaned;
-  } else if (cleaned.startsWith('+')) {
-    return cleaned;
-  } else {
-    throw new Error('Invalid phone number format');
-  }
+  if (cleaned.length === 10) return '+1' + cleaned;
+  if (cleaned.length === 11 && cleaned.startsWith('1')) return '+' + cleaned;
+  if (cleaned.startsWith('+')) return cleaned;
+  throw new Error('Invalid phone number format');
 }
 
-// Route to handle coupon generation
 app.post('/generate-coupon', async (req, res) => {
   try {
     const { firstName, lastName, userEmail, phoneNumber, zipCode } = req.body;
-
     const formattedPhone = formatPhoneNumber(phoneNumber);
 
     const authResponse = await axios.post(
@@ -121,5 +113,6 @@ app.post('/generate-coupon', async (req, res) => {
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
+
 
 
