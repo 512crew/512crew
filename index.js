@@ -62,7 +62,7 @@ const createCoupon = async (accessToken, userKey) => {
       }
     );
 
-    // Log the full response to see what we're getting
+    // Log the full response to verify structure
     console.log('🎉 Full Coupon API Response:', JSON.stringify(response.data, null, 2));
     return response.data;
   } catch (error) {
@@ -83,8 +83,7 @@ app.post('/generate-coupon', async (req, res) => {
     const { accessToken, userKey } = await authenticateUser();
     const couponData = await createCoupon(accessToken, userKey);
 
-    // Try to extract the coupon code if it exists
-    const couponCode = couponData?.data?.couponCode || 'Coupon not returned';
+    const couponCode = couponData?.data?.[0]?.couponCode || 'Coupon not returned';
     const barcodeText = couponCode || 'No barcode';
 
     res.json({
