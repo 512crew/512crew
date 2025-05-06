@@ -1,4 +1,3 @@
-require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
@@ -34,9 +33,7 @@ async function accessSpreadsheet() {
 
 // Helper function to format phone numbers to E.164
 function formatPhoneNumber(phone) {
-  // Remove non-digit characters
   const cleaned = ('' + phone).replace(/\D/g, '');
-  // Check if the number has 10 digits
   if (cleaned.length === 10) {
     return '+1' + cleaned;
   } else if (cleaned.length === 11 && cleaned.startsWith('1')) {
@@ -53,10 +50,8 @@ app.post('/generate-coupon', async (req, res) => {
   try {
     const { firstName, lastName, userEmail, phoneNumber, zipCode } = req.body;
 
-    // Format phone number
     const formattedPhone = formatPhoneNumber(phoneNumber);
 
-    // Step 1: Authenticate with external API to get accessToken and userKey
     const authResponse = await axios.post(
       'https://api.nxtwash.com:300/api/User/AuthenticateUser',
       {
@@ -70,7 +65,6 @@ app.post('/generate-coupon', async (req, res) => {
 
     const { accessToken, key: userKey } = authResponse.data.data;
 
-    // Step 2: Create coupon
     const couponResponse = await axios.post(
       'https://api.nxtwash.com:300/api/coupons/create',
       {
@@ -91,11 +85,8 @@ app.post('/generate-coupon', async (req, res) => {
     }
 
     const couponCode = couponData.couponCode;
-
-    // Step 3: Generate barcode URL
     const barcodeUrl = `https://barcode.tec-it.com/barcode.ashx?data=${couponCode}&code=Code128&dpi=96`;
 
-    // Step 4: Send SMS with coupon code and barcode link
     const smsBody = `🚀 Blast Off to a Better Shine!\nYour $9.99 First Month starts now.\nCode: ${couponCode}\nScan & redeem: ${barcodeUrl}\n- From Houston's Shine Experts ✨`;
 
     const message = await twilioClient.messages.create({
@@ -106,7 +97,6 @@ app.post('/generate-coupon', async (req, res) => {
 
     console.log('✅ SMS sent:', message.sid);
 
-    // Step 5: Store data in Google Sheet
     const sheet = await accessSpreadsheet();
     await sheet.addRow({
       Timestamp: moment().format('YYYY-MM-DD HH:mm:ss'),
@@ -120,7 +110,6 @@ app.post('/generate-coupon', async (req, res) => {
 
     console.log('✅ Row added to Google Sheet');
 
-    // Step 6: Respond with coupon code and barcode URL
     res.json({ couponCode, barcodeUrl });
   } catch (error) {
     console.error('❌ Error:', error.message);
@@ -128,7 +117,7 @@ app.post('/generate-coupon', async (req, res) => {
   }
 });
 
-// Start the server
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
+
