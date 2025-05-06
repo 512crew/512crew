@@ -62,7 +62,8 @@ const createCoupon = async (accessToken, userKey) => {
       }
     );
 
-    console.log('🎉 Coupon Created:', response.data);
+    // Log the full response to see what we're getting
+    console.log('🎉 Full Coupon API Response:', JSON.stringify(response.data, null, 2));
     return response.data;
   } catch (error) {
     console.error('❌ Error creating coupon:', error.response?.data || error.message);
@@ -82,9 +83,13 @@ app.post('/generate-coupon', async (req, res) => {
     const { accessToken, userKey } = await authenticateUser();
     const couponData = await createCoupon(accessToken, userKey);
 
+    // Try to extract the coupon code if it exists
+    const couponCode = couponData?.data?.couponCode || 'Coupon not returned';
+    const barcodeText = couponCode || 'No barcode';
+
     res.json({
-      couponCode: couponData?.data?.couponCode || 'Coupon not returned',
-      barcodeText: couponData?.data?.couponCode || 'No barcode'
+      couponCode,
+      barcodeText
     });
   } catch (error) {
     console.error('🚨 Error during coupon generation:', error.message);
@@ -96,4 +101,3 @@ app.post('/generate-coupon', async (req, res) => {
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
-
