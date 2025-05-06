@@ -62,8 +62,10 @@ const createCoupon = async (accessToken, userKey) => {
       }
     );
 
-    // Log the full response to verify structure
-    console.log('🎉 Full Coupon API Response:', JSON.stringify(response.data, null, 2));
+    // Log the full raw response and nested access
+    console.log('🎉 Full Coupon API Raw Response:', response.data);
+    console.log('🎉 Full Coupon Nested Access:', response.data?.data);
+
     return response.data;
   } catch (error) {
     console.error('❌ Error creating coupon:', error.response?.data || error.message);
@@ -83,7 +85,12 @@ app.post('/generate-coupon', async (req, res) => {
     const { accessToken, userKey } = await authenticateUser();
     const couponData = await createCoupon(accessToken, userKey);
 
-    const couponCode = couponData?.data?.[0]?.couponCode || 'Coupon not returned';
+    // Flexible parsing depending on nesting format
+    const couponCode =
+      couponData?.data?.[0]?.couponCode ||
+      couponData?.data?.data?.[0]?.couponCode ||
+      'Coupon not returned';
+
     const barcodeText = couponCode || 'No barcode';
 
     res.json({
@@ -100,3 +107,4 @@ app.post('/generate-coupon', async (req, res) => {
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
+
