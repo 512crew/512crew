@@ -3,31 +3,32 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 
-// Initialize Express server
+// Express setup
 const app = express();
 const port = 8080;
+
 app.use(cors());
 app.use(bodyParser.json());
 
-// NXT Wash API credentials and endpoint
+// NXT Wash API info
 const apiUrl = 'https://api.nxtwash.com:300/api/User/AuthenticateUser';
 const couponUrl = 'https://api.nxtwash.com:300/api/coupons/create';
 const adminEmail = '512crews@gmail.com';
 const adminPassword = 'blastoff123$';
 
-// Authentication function
+// Authenticate with NXT Wash
 const authenticateUser = async () => {
   try {
     const response = await axios.post(
       apiUrl,
       {
         emailOrPhone: adminEmail,
-        password: adminPassword,
+        password: adminPassword
       },
       {
         headers: {
-          'Content-Type': 'application/json',
-        },
+          'Content-Type': 'application/json'
+        }
       }
     );
 
@@ -36,7 +37,7 @@ const authenticateUser = async () => {
     console.log('✅ Authenticated with NXT Wash');
     return {
       accessToken: data.accessToken,
-      userKey: data.key,
+      userKey: data.key
     };
   } catch (error) {
     console.error('❌ Error authenticating:', error.response?.data || error.message);
@@ -44,20 +45,20 @@ const authenticateUser = async () => {
   }
 };
 
-// Coupon creation function
-const createCoupon = async (accessToken, userKey, userEmail) => {
+// Generate coupon
+const createCoupon = async (accessToken, userKey) => {
   try {
     const response = await axios.post(
       couponUrl,
       {
         couponPackageId: 4,
-        key: userKey,
+        key: userKey
       },
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
+          'Content-Type': 'application/json'
+        }
       }
     );
 
@@ -69,7 +70,7 @@ const createCoupon = async (accessToken, userKey, userEmail) => {
   }
 };
 
-// API route to handle the coupon generation
+// API route
 app.post('/generate-coupon', async (req, res) => {
   try {
     const { userEmail } = req.body;
@@ -79,11 +80,11 @@ app.post('/generate-coupon', async (req, res) => {
     }
 
     const { accessToken, userKey } = await authenticateUser();
-    const couponData = await createCoupon(accessToken, userKey, userEmail);
+    const couponData = await createCoupon(accessToken, userKey);
 
     res.json({
-      couponCode: couponData?.data?.couponCode || 'No code returned',
-      barcodeText: couponData?.data?.couponCode || '', // Use couponCode as barcode fallback
+      couponCode: couponData?.data?.couponCode || 'Coupon not returned',
+      barcodeText: couponData?.data?.couponCode || 'No barcode'
     });
   } catch (error) {
     console.error('🚨 Error during coupon generation:', error.message);
@@ -91,7 +92,7 @@ app.post('/generate-coupon', async (req, res) => {
   }
 });
 
-// Start the server
+// Start server
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
