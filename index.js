@@ -1,130 +1,134 @@
 require('dotenv').config();
-const axios = require('axios');
 const express = require('express');
 const bodyParser = require('body-parser');
-const cors = require('cors');
+const axios = require('axios');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
-const Twilio = require('twilio');
+const twilio = require('twilio');
 const moment = require('moment');
 
-const twilioClient = new Twilio(
-  process.env.TWILIO_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
-const twilioNumber = process.env.TWILIO_NUMBER;
-
-const doc = new GoogleSpreadsheet('14le_2RbNzWorWl4nlLCDk73zMwg-HkDpPHaaYQU7PIA');
-const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
-
-const apiUrl = 'https://api.nxtwash.com:300/api/User/AuthenticateUser';
-const couponUrl = 'https://api.nxtwash.com:300/api/coupons/create';
-const adminEmail = process.env.NXT_ADMIN_EMAIL;
-const adminPassword = process.env.NXT_ADMIN_PASSWORD;
-
 const app = express();
-const port = 8080;
+const port = process.env.PORT || 8080;
 
-app.use(cors());
+// Middleware
 app.use(bodyParser.json());
 
-const authenticateUser = async () => {
-  const response = await axios.post(
-    apiUrl,
-    { emailOrPhone: adminEmail, password: adminPassword },
-    { headers: { 'Content-Type': 'application/json' } }
-  );
-  const data = response.data.data;
-  return { accessToken: data.accessToken, userKey: data.key };
-};
+// Twilio configuration
+const twilioClient = twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
+const twilioNumber = process.env.TWILIO_PHONE_NUMBER;
 
-const createCoupon = async (accessToken, userKey) => {
-  const response = await axios.post(
-    couponUrl,
-    { couponPackageId: 4, key: userKey },
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    }
-  );
-  return response.data?.data?.[0]?.couponCode;
-};
+// Google Sheets configuration
+const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID);
 
-const formatPhoneNumber = (raw) => {
-  if (raw.startsWith('+1')) return raw;
-  if (raw.length === 10) return `+1${raw}`;
-  if (raw.length === 11 && raw.startsWith('1')) return `+${raw}`;
-  throw new Error('Invalid phone number format');
-};
+// Authenticate with Google Sheets
+async function accessSpreadsheet() {
+  await doc.useServiceAccountAuth({
+    client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  });
+  await doc.loadInfo();
+  return doc.sheetsByIndex[0]; // Assuming the first sheet
+}
 
-const sendSMS = async (phoneNumber, couponCode) => {
-  try {
-    const formattedPhone = formatPhoneNumber(phoneNumber);
-    const barcodeUrl = `https://barcode.tec-it.com/barcode.ashx?data=${couponCode}&code=Code128&dpi=96`;
-
-    const response = await twilioClient.messages.create({
-      to: formattedPhone,
-      from: twilioNumber,
-      body: `🚀 Blast Off to a Better Shine! Your $9.99 First Month starts now. Code: ${couponCode}\nScan & redeem: ${barcodeUrl}\n- From Houston's Shine Experts ✨`
-    });
-
-    console.log('✅ SMS sent:', response.sid);
-  } catch (err) {
-    console.error('❌ SMS error:', err.message);
-    throw new Error('SMS delivery failed');
+// Helper function to format phone numbers to E.164
+function formatPhoneNumber(phone) {
+  // Remove non-digit characters
+  const cleaned = ('' + phone).replace(/\D/g, '');
+  // Check if the number has 10 digits
+  if (cleaned.length === 10) {
+    return '+1' + cleaned;
+  } else if (cleaned.length === 11 && cleaned.startsWith('1')) {
+    return '+' + cleaned;
+  } else if (cleaned.startsWith('+')) {
+    return cleaned;
+  } else {
+    throw new Error('Invalid phone number format');
   }
-};
+}
 
-const storeInGoogleSheet = async (data) => {
-  try {
-    await doc.useServiceAccountAuth({
-      client_email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      private_key: GOOGLE_PRIVATE_KEY
-    });
-    await doc.loadInfo();
-    const sheet = doc.sheetsByIndex[0];
-    await sheet.addRow({
-      Timestamp: moment().format('YYYY-MM-DD HH:mm:ss'),
-      'First Name': data.firstName,
-      'Last Name': data.lastName,
-      Email: data.userEmail,
-      Phone: data.phoneNumber,
-      'Zip Code': data.zipCode,
-      'Coupon Code': data.couponCode
-    });
-    console.log('✅ Row added to Google Sheet');
-  } catch (err) {
-    console.error('❌ Google Sheet error:', err.message);
-  }
-};
-
+// Route to handle coupon generation
 app.post('/generate-coupon', async (req, res) => {
   try {
     const { firstName, lastName, userEmail, phoneNumber, zipCode } = req.body;
-    console.log('📲 About to send SMS to:', phoneNumber);
 
-    const { accessToken, userKey } = await authenticateUser();
-    const couponCode = await createCoupon(accessToken, userKey);
+    // Format phone number
+    const formattedPhone = formatPhoneNumber(phoneNumber);
 
-    if (!couponCode) throw new Error('Coupon code not returned');
+    // Step 1: Authenticate with external API to get accessToken and userKey
+    const authResponse = await axios.post(
+      'https://api.nxtwash.com:300/api/User/AuthenticateUser',
+      {
+        emailOrPhone: process.env.NXT_ADMIN_EMAIL,
+        password: process.env.NXT_ADMIN_PASSWORD,
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
 
-    await sendSMS(phoneNumber, couponCode);
-    await storeInGoogleSheet({ firstName, lastName, userEmail, phoneNumber, zipCode, couponCode });
+    const { accessToken, key: userKey } = authResponse.data.data;
 
+    // Step 2: Create coupon
+    const couponResponse = await axios.post(
+      'https://api.nxtwash.com:300/api/coupons/create',
+      {
+        couponPackageId: 4,
+        key: userKey,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    const couponData = couponResponse.data?.data?.[0];
+    if (!couponData || !couponData.couponCode) {
+      throw new Error('Failed to generate coupon code');
+    }
+
+    const couponCode = couponData.couponCode;
+
+    // Step 3: Generate barcode URL
     const barcodeUrl = `https://barcode.tec-it.com/barcode.ashx?data=${couponCode}&code=Code128&dpi=96`;
 
-    res.json({ couponCode, barcodeText: couponCode, barcodeUrl });
+    // Step 4: Send SMS with coupon code and barcode link
+    const smsBody = `🚀 Blast Off to a Better Shine!\nYour $9.99 First Month starts now.\nCode: ${couponCode}\nScan & redeem: ${barcodeUrl}\n- From Houston's Shine Experts ✨`;
+
+    const message = await twilioClient.messages.create({
+      body: smsBody,
+      from: twilioNumber,
+      to: formattedPhone,
+    });
+
+    console.log('✅ SMS sent:', message.sid);
+
+    // Step 5: Store data in Google Sheet
+    const sheet = await accessSpreadsheet();
+    await sheet.addRow({
+      Timestamp: moment().format('YYYY-MM-DD HH:mm:ss'),
+      'First Name': firstName,
+      'Last Name': lastName,
+      Email: userEmail,
+      Phone: formattedPhone,
+      'Zip Code': zipCode,
+      'Coupon Code': couponCode,
+    });
+
+    console.log('✅ Row added to Google Sheet');
+
+    // Step 6: Respond with coupon code and barcode URL
+    res.json({ couponCode, barcodeUrl });
   } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ message: error.message || 'Failed to process coupon' });
+    console.error('❌ Error:', error.message);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
   }
 });
 
+// Start the server
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
-
-
-
