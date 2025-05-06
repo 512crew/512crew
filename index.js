@@ -19,8 +19,8 @@ const authenticate = async () => {
     const response = await axios.post(
       `${NXT_API_URL}/api/User/AuthenticateUser`,
       {
-        email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD
+        EmailOrPhone: ADMIN_EMAIL,  // Use "EmailOrPhone" as per NXT API
+        Password: ADMIN_PASSWORD    // Correct field names: EmailOrPhone and Password
       },
       {
         headers: {
