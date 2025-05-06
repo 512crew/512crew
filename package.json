@@ -13,7 +13,11 @@
     "google-spreadsheet": "^3.3.0",
     "moment": "^2.29.4",
     "twilio": "^4.5.0"
+  },
+  "engines": {
+    "node": "18.x"
   }
 }
+
 
 
