@@ -78,26 +78,33 @@ const sendSMS = async (phoneNumber, couponCode) => {
 };
 
 const storeInGoogleSheet = async (data) => {
-  await doc.useServiceAccountAuth({
-    client_email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    private_key: GOOGLE_PRIVATE_KEY
-  });
-  await doc.loadInfo();
-  const sheet = doc.sheetsByIndex[0];
-  await sheet.addRow({
-    Timestamp: moment().format('YYYY-MM-DD HH:mm:ss'),
-    'First Name': data.firstName,
-    'Last Name': data.lastName,
-    Email: data.userEmail,
-    Phone: data.phoneNumber,
-    'Zip Code': data.zipCode,
-    'Coupon Code': data.couponCode
-  });
+  try {
+    await doc.useServiceAccountAuth({
+      client_email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      private_key: GOOGLE_PRIVATE_KEY
+    });
+    await doc.loadInfo();
+    const sheet = doc.sheetsByIndex[0];
+    await sheet.addRow({
+      Timestamp: moment().format('YYYY-MM-DD HH:mm:ss'),
+      'First Name': data.firstName,
+      'Last Name': data.lastName,
+      Email: data.userEmail,
+      Phone: data.phoneNumber,
+      'Zip Code': data.zipCode,
+      'Coupon Code': data.couponCode
+    });
+    console.log('✅ Row added to Google Sheet');
+  } catch (err) {
+    console.error('❌ Google Sheet error:', err.message);
+  }
 };
 
 app.post('/generate-coupon', async (req, res) => {
   try {
     const { firstName, lastName, userEmail, phoneNumber, zipCode } = req.body;
+    console.log('📲 About to send SMS to:', phoneNumber);
+
     const { accessToken, userKey } = await authenticateUser();
     const couponCode = await createCoupon(accessToken, userKey);
 
@@ -106,7 +113,9 @@ app.post('/generate-coupon', async (req, res) => {
     await sendSMS(phoneNumber, couponCode);
     await storeInGoogleSheet({ firstName, lastName, userEmail, phoneNumber, zipCode, couponCode });
 
-    res.json({ couponCode, barcodeText: couponCode });
+    const barcodeUrl = `https://barcode.tec-it.com/barcode.ashx?data=${couponCode}&code=Code128&dpi=96`;
+
+    res.json({ couponCode, barcodeText: couponCode, barcodeUrl });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ message: error.message || 'Failed to process coupon' });
@@ -116,5 +125,6 @@ app.post('/generate-coupon', async (req, res) => {
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
+
 
 
