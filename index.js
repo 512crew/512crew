@@ -8,12 +8,8 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 10000;
 
-// ✅ Allow CORS from your live site
-app.use(cors({
-  origin: 'https://blastoffcarwash.net',
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type']
-}));
+// ✅ TEMP: Allow all CORS origins during testing
+app.use(cors());
 
 app.use(bodyParser.json());
 
@@ -119,4 +115,5 @@ app.post('/generate-coupon', async (req, res) => {
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
+
 
