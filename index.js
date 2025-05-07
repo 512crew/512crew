@@ -2,13 +2,13 @@ const express = require('express');
 const axios = require('axios');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const { GoogleSpreadsheet } = require('google-spreadsheet');
+const { Client } = require('@notionhq/client');
 require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 10000;
 
-// ✅ Enable CORS for your frontend origin
+// ✅ Allow CORS from your live site
 app.use(cors({
   origin: 'https://blastoffcarwash.net',
   methods: ['GET', 'POST', 'OPTIONS'],
@@ -17,14 +17,15 @@ app.use(cors({
 
 app.use(bodyParser.json());
 
-// NXT Wash API
+// NXT Wash API Credentials
 const NXT_API_URL = 'https://api.nxtwash.com/api/users/authenticate';
 const COUPON_API_URL = 'https://api.nxtwash.com/api/coupons/create';
 const ADMIN_EMAIL = '512crews@gmail.com';
 const ADMIN_PASSWORD = 'blastoff123$';
 
-// Google Sheets Setup
-const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID);
+// Notion Setup
+const notion = new Client({ auth: process.env.NOTION_SECRET });
+const NOTION_DB_ID = process.env.NOTION_DB_ID;
 
 const authenticateWithNXT = async () => {
   try {
@@ -72,27 +73,24 @@ const createCoupon = async (accessToken, key) => {
   }
 };
 
-const saveToGoogleSheet = async (userData, couponCode) => {
+const saveToNotion = async (userData, couponCode) => {
   try {
-    await doc.useServiceAccountAuth({
-      client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+    await notion.pages.create({
+      parent: { database_id: NOTION_DB_ID },
+      properties: {
+        'First Name': { title: [{ text: { content: userData.firstName } }] },
+        'Last Name': { rich_text: [{ text: { content: userData.lastName } }] },
+        'Email': { email: userData.userEmail },
+        'Phone': { phone_number: userData.phoneNumber },
+        'Zip Code': { rich_text: [{ text: { content: userData.zipCode } }] },
+        'Coupon Code': { rich_text: [{ text: { content: couponCode } }] },
+        'Submitted At': { date: { start: new Date().toISOString() } }
+      }
     });
-    await doc.loadInfo();
-    const sheet = doc.sheetsByIndex[0];
-    await sheet.addRow({
-      Timestamp: new Date().toISOString(),
-      'First Name': userData.firstName,
-      'Last Name': userData.lastName,
-      Email: userData.userEmail,
-      Phone: userData.phoneNumber,
-      'Zip Code': userData.zipCode,
-      'Coupon Code': couponCode
-    });
-    console.log('✅ Row added to Google Sheet');
+    console.log('✅ Entry saved to Notion');
   } catch (err) {
-    console.error('❌ Error writing to Google Sheet:', err);
-    throw new Error('Google Sheet error');
+    console.error('❌ Error saving to Notion:', err.message);
+    throw new Error('Notion save failed');
   }
 };
 
@@ -108,9 +106,10 @@ app.post('/generate-coupon', async (req, res) => {
     const { accessToken, key } = authData;
 
     const coupon = await createCoupon(accessToken, key);
-    await saveToGoogleSheet({ firstName, lastName, userEmail, phoneNumber, zipCode }, coupon.couponCode);
+    await saveToNotion({ firstName, lastName, userEmail, phoneNumber, zipCode }, coupon.couponCode);
 
-    res.json({ couponCode: coupon.couponCode, barcodeUrl: coupon.barcodeUrl });
+    res.setHeader('Content-Type', 'application/json');
+    res.status(200).json({ couponCode: coupon.couponCode, barcodeUrl: coupon.barcodeUrl });
   } catch (err) {
     console.error('❌ Error in /generate-coupon:', err.message);
     res.status(500).json({ message: 'Something went wrong.' });
@@ -120,3 +119,4 @@ app.post('/generate-coupon', async (req, res) => {
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
+
