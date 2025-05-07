@@ -1,118 +1,126 @@
 const express = require('express');
-const bodyParser = require('body-parser');
 const axios = require('axios');
+const bodyParser = require('body-parser');
+const cors = require('cors');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
-const twilio = require('twilio');
-const moment = require('moment');
-const fs = require('fs');
+require('dotenv').config();
 
 const app = express();
-const port = process.env.PORT || 8080;
+const port = process.env.PORT || 10000;
 
-// Middleware
+// ✅ Enable CORS for your frontend origin
+app.use(cors({
+  origin: 'https://blastoffcarwash.net',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type']
+}));
+
 app.use(bodyParser.json());
 
-// Twilio configuration
-const twilioClient = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
-const twilioNumber = process.env.TWILIO_PHONE_NUMBER || '+18665804414';
+// NXT Wash API
+const NXT_API_URL = 'https://api.nxtwash.com/api/users/authenticate';
+const COUPON_API_URL = 'https://api.nxtwash.com/api/coupons/create';
+const ADMIN_EMAIL = '512crews@gmail.com';
+const ADMIN_PASSWORD = 'blastoff123$';
 
-// Google Sheets configuration
+// Google Sheets Setup
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID);
 
-// Authenticate with Google Sheets
-async function accessSpreadsheet() {
-  await doc.useServiceAccountAuth({
-    client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    private_key: fs.readFileSync('/etc/secrets/google-private-key.pem', 'utf8'),
-  });
-  await doc.loadInfo();
-  return doc.sheetsByIndex[0];
-}
-
-function formatPhoneNumber(phone) {
-  const cleaned = ('' + phone).replace(/\D/g, '');
-  if (cleaned.length === 10) return '+1' + cleaned;
-  if (cleaned.length === 11 && cleaned.startsWith('1')) return '+' + cleaned;
-  if (cleaned.startsWith('+')) return cleaned;
-  throw new Error('Invalid phone number format');
-}
-
-app.post('/generate-coupon', async (req, res) => {
+const authenticateWithNXT = async () => {
   try {
-    const { firstName, lastName, userEmail, phoneNumber, zipCode } = req.body;
-    const formattedPhone = formatPhoneNumber(phoneNumber);
+    const response = await axios.post(NXT_API_URL, {
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD,
+    });
+    console.log('✅ Authenticated with NXT Wash');
+    return response.data;
+  } catch (error) {
+    console.error('❌ Error authenticating with NXT:', error.response?.data || error.message);
+    throw new Error('NXT Authentication Failed');
+  }
+};
 
-    const authResponse = await axios.post(
-      'https://api.nxtwash.com:300/api/User/AuthenticateUser',
+const createCoupon = async (accessToken, key) => {
+  try {
+    const response = await axios.post(
+      COUPON_API_URL,
       {
-        emailOrPhone: process.env.NXT_ADMIN_EMAIL,
-        password: process.env.NXT_ADMIN_PASSWORD,
-      },
-      {
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-
-    const { accessToken, key: userKey } = authResponse.data.data;
-
-    const couponResponse = await axios.post(
-      'https://api.nxtwash.com:300/api/coupons/create',
-      {
-        couponPackageId: 4,
-        key: userKey,
+        key: key,
+        couponPackageId: 4
       },
       {
         headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
+          Authorization: `Bearer ${accessToken}`
+        }
       }
     );
 
-    const couponData = couponResponse.data?.data?.[0];
-    if (!couponData || !couponData.couponCode) {
-      throw new Error('Failed to generate coupon code');
+    console.log('🎉 Full Coupon API Raw Response:', response.data);
+    const coupon = response.data?.data?.[0];
+
+    if (!coupon?.couponCode) {
+      throw new Error('Coupon not returned');
     }
 
-    const couponCode = couponData.couponCode;
-    const barcodeUrl = `https://barcode.tec-it.com/barcode.ashx?data=${couponCode}&code=Code128&dpi=96`;
-
-    const smsBody = `🚀 Blast Off to a Better Shine!\nYour $9.99 First Month starts now.\nCode: ${couponCode}\nScan & redeem: ${barcodeUrl}\n- From Houston's Shine Experts ✨`;
-
-    const message = await twilioClient.messages.create({
-      body: smsBody,
-      from: twilioNumber,
-      to: formattedPhone,
-    });
-
-    console.log('✅ SMS sent:', message.sid);
-
-    const sheet = await accessSpreadsheet();
-    await sheet.addRow({
-      Timestamp: moment().format('YYYY-MM-DD HH:mm:ss'),
-      'First Name': firstName,
-      'Last Name': lastName,
-      Email: userEmail,
-      Phone: formattedPhone,
-      'Zip Code': zipCode,
-      'Coupon Code': couponCode,
-    });
-
-    console.log('✅ Row added to Google Sheet');
-
-    res.json({ couponCode, barcodeUrl });
+    return {
+      couponCode: coupon.couponCode,
+      barcodeUrl: `https://barcode.tec-it.com/barcode.ashx?data=${coupon.couponCode}&code=Code128&dpi=96`
+    };
   } catch (error) {
-    console.error('❌ Error:', error.message);
-    res.status(500).json({ message: error.message || 'Internal Server Error' });
+    console.error('❌ Error creating coupon:', error.response?.data || error.message);
+    throw new Error('Coupon creation failed');
+  }
+};
+
+const saveToGoogleSheet = async (userData, couponCode) => {
+  try {
+    await doc.useServiceAccountAuth({
+      client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+    });
+    await doc.loadInfo();
+    const sheet = doc.sheetsByIndex[0];
+    await sheet.addRow({
+      Timestamp: new Date().toISOString(),
+      'First Name': userData.firstName,
+      'Last Name': userData.lastName,
+      Email: userData.userEmail,
+      Phone: userData.phoneNumber,
+      'Zip Code': userData.zipCode,
+      'Coupon Code': couponCode
+    });
+    console.log('✅ Row added to Google Sheet');
+  } catch (err) {
+    console.error('❌ Error writing to Google Sheet:', err);
+    throw new Error('Google Sheet error');
+  }
+};
+
+app.post('/generate-coupon', async (req, res) => {
+  const { firstName, lastName, userEmail, phoneNumber, zipCode } = req.body;
+
+  if (!firstName || !lastName || !userEmail || !phoneNumber || !zipCode) {
+    return res.status(400).json({ message: 'All fields are required.' });
+  }
+
+  try {
+    const authData = await authenticateWithNXT();
+    const { accessToken, key } = authData;
+
+    const coupon = await createCoupon(accessToken, key);
+    await saveToGoogleSheet({ firstName, lastName, userEmail, phoneNumber, zipCode }, coupon.couponCode);
+
+    res.json({ couponCode: coupon.couponCode, barcodeUrl: coupon.barcodeUrl });
+  } catch (err) {
+    console.error('❌ Error in /generate-coupon:', err.message);
+    res.status(500).json({ message: 'Something went wrong.' });
   }
 });
 
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
+
 
 
 
