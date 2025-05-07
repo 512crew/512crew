@@ -15,22 +15,21 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
-const NXT_API_URL = 'https://api.nxtwash.com:300/api/User/AuthenticateUser'; // ✅ Correct endpoint
-const COUPON_API_URL = 'https://api.nxtwash.com:300/api/coupons/create';     // ✅ Ensure correct port
+const NXT_API_URL = 'https://api.nxtwash.com:300/api/User/AuthenticateUser';
+const COUPON_API_URL = 'https://api.nxtwash.com:300/api/coupons/create';
 const ADMIN_EMAIL = process.env.NXT_ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.NXT_ADMIN_PASSWORD;
 
 const authenticateWithNXT = async () => {
   try {
     const response = await axios.post(NXT_API_URL, {
-      emailOrPhone: ADMIN_EMAIL, // ✅ Correct field
+      emailOrPhone: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
     }, {
       headers: {
         'Content-Type': 'application/json'
       }
     });
-
     console.log('✅ Authenticated with NXT Wash');
     return response.data.data;
   } catch (error) {
@@ -94,3 +93,4 @@ app.post('/generate-coupon', async (req, res) => {
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
+
