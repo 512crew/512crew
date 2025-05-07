@@ -2,26 +2,26 @@ const express = require('express');
 const axios = require('axios');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const { Client } = require('@notionhq/client');
 require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 10000;
 
-// ✅ TEMP: Allow all CORS origins during testing
-app.use(cors());
+// ✅ CORS config to allow only your domain
+const corsOptions = {
+  origin: 'https://blastoffcarwash.net',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type']
+};
+app.use(cors(corsOptions));
 
 app.use(bodyParser.json());
 
 // NXT Wash API Credentials
 const NXT_API_URL = 'https://api.nxtwash.com/api/users/authenticate';
 const COUPON_API_URL = 'https://api.nxtwash.com/api/coupons/create';
-const ADMIN_EMAIL = '512crews@gmail.com';
-const ADMIN_PASSWORD = 'blastoff123$';
-
-// Notion Setup
-const notion = new Client({ auth: process.env.NOTION_SECRET });
-const NOTION_DB_ID = process.env.NOTION_DB_ID;
+const ADMIN_EMAIL = process.env.NXT_ADMIN_EMAIL;
+const ADMIN_PASSWORD = process.env.NXT_ADMIN_PASSWORD;
 
 const authenticateWithNXT = async () => {
   try {
@@ -69,27 +69,6 @@ const createCoupon = async (accessToken, key) => {
   }
 };
 
-const saveToNotion = async (userData, couponCode) => {
-  try {
-    await notion.pages.create({
-      parent: { database_id: NOTION_DB_ID },
-      properties: {
-        'First Name': { title: [{ text: { content: userData.firstName } }] },
-        'Last Name': { rich_text: [{ text: { content: userData.lastName } }] },
-        'Email': { email: userData.userEmail },
-        'Phone': { phone_number: userData.phoneNumber },
-        'Zip Code': { rich_text: [{ text: { content: userData.zipCode } }] },
-        'Coupon Code': { rich_text: [{ text: { content: couponCode } }] },
-        'Submitted At': { date: { start: new Date().toISOString() } }
-      }
-    });
-    console.log('✅ Entry saved to Notion');
-  } catch (err) {
-    console.error('❌ Error saving to Notion:', err.message);
-    throw new Error('Notion save failed');
-  }
-};
-
 app.post('/generate-coupon', async (req, res) => {
   const { firstName, lastName, userEmail, phoneNumber, zipCode } = req.body;
 
@@ -102,7 +81,6 @@ app.post('/generate-coupon', async (req, res) => {
     const { accessToken, key } = authData;
 
     const coupon = await createCoupon(accessToken, key);
-    await saveToNotion({ firstName, lastName, userEmail, phoneNumber, zipCode }, coupon.couponCode);
 
     res.setHeader('Content-Type', 'application/json');
     res.status(200).json({ couponCode: coupon.couponCode, barcodeUrl: coupon.barcodeUrl });
@@ -115,5 +93,3 @@ app.post('/generate-coupon', async (req, res) => {
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
-
-
