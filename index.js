@@ -7,30 +7,32 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 10000;
 
-// ✅ CORS config to allow only your domain
 const corsOptions = {
   origin: 'https://blastoffcarwash.net',
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type']
 };
 app.use(cors(corsOptions));
-
 app.use(bodyParser.json());
 
-// NXT Wash API Credentials
-const NXT_API_URL = 'https://api.nxtwash.com/api/users/authenticate';
-const COUPON_API_URL = 'https://api.nxtwash.com/api/coupons/create';
+const NXT_API_URL = 'https://api.nxtwash.com:300/api/User/AuthenticateUser'; // ✅ Correct endpoint
+const COUPON_API_URL = 'https://api.nxtwash.com:300/api/coupons/create';     // ✅ Ensure correct port
 const ADMIN_EMAIL = process.env.NXT_ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.NXT_ADMIN_PASSWORD;
 
 const authenticateWithNXT = async () => {
   try {
     const response = await axios.post(NXT_API_URL, {
-      email: ADMIN_EMAIL,
+      emailOrPhone: ADMIN_EMAIL, // ✅ Correct field
       password: ADMIN_PASSWORD,
+    }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
     });
+
     console.log('✅ Authenticated with NXT Wash');
-    return response.data;
+    return response.data.data;
   } catch (error) {
     console.error('❌ Error authenticating with NXT:', error.response?.data || error.message);
     throw new Error('NXT Authentication Failed');
@@ -82,7 +84,6 @@ app.post('/generate-coupon', async (req, res) => {
 
     const coupon = await createCoupon(accessToken, key);
 
-    res.setHeader('Content-Type', 'application/json');
     res.status(200).json({ couponCode: coupon.couponCode, barcodeUrl: coupon.barcodeUrl });
   } catch (err) {
     console.error('❌ Error in /generate-coupon:', err.message);
