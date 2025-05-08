@@ -8,7 +8,7 @@ const app = express();
 const port = process.env.PORT || 10000;
 
 const corsOptions = {
-  origin: 'https://blastoffcarwash.net',
+  origin: 'https://blastoffcarwash.com',
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type']
 };
@@ -93,4 +93,5 @@ app.post('/generate-coupon', async (req, res) => {
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
+
 
