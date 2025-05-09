@@ -18,6 +18,7 @@ app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
 // NXT Wash API endpoints
+enableLogging = true;
 const NXT_AUTH_URL = 'https://api.nxtwash.com:300/api/User/AuthenticateUser';
 const NXT_COUPON_URL = 'https://api.nxtwash.com:300/api/coupons/create';
 const ADMIN_EMAIL = process.env.NXT_ADMIN_EMAIL;
@@ -46,6 +47,20 @@ async function createCoupon(accessToken, key) {
   return { couponCode: item.couponCode, barcodeUrl: `https://barcode.tec-it.com/barcode.ashx?data=${item.couponCode}&code=Code128&dpi=96` };
 }
 
+// Check if phone has already been used
+async function hasUsedPhone(phoneNumber) {
+  const res = await notion.databases.query({
+    database_id: NOTION_DB_ID,
+    filter: {
+      property: 'Phone',
+      phone_number: {
+        equals: phoneNumber
+      }
+    }
+  });
+  return res.results.length > 0;
+}
+
 // Save submission to Notion
 async function saveToNotion(data) {
   await notion.pages.create({
@@ -67,15 +82,27 @@ app.post('/generate-coupon', async (req, res) => {
   if (!firstName || !lastName || !userEmail || !phoneNumber || !zipCode) {
     return res.status(400).json({ message: 'All fields are required.' });
   }
+
   try {
+    // Prevent duplicate phone submissions
+    if (await hasUsedPhone(phoneNumber)) {
+      return res.status(400).json({ message: 'This phone number has already received a coupon.' });
+    }
+
     const { accessToken, key } = await authenticateWithNXT();
     const coupon = await createCoupon(accessToken, key);
-    // Attach couponCode to data for notion
+
+    // Prepare and save submission to Notion
     const notionData = { firstName, lastName, userEmail, phoneNumber, zipCode, couponCode: coupon.couponCode };
     await saveToNotion(notionData);
+
     res.status(200).json(coupon);
   } catch (error) {
-    console.error('Error in /generate-coupon:', error);
+    console.error('Error in /generate-coupon:', error.message || error);
+    // Return NXT auth errors or duplication error as JSON
+    if (error.message.includes('already received')) {
+      return res.status(400).json({ message: error.message });
+    }
     res.status(500).json({ message: 'Something went wrong.' });
   }
 });
@@ -83,3 +110,4 @@ app.post('/generate-coupon', async (req, res) => {
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
+
