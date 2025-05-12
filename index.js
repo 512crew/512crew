@@ -18,7 +18,6 @@ app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
 // NXT Wash API endpoints
-enableLogging = true;
 const NXT_AUTH_URL = 'https://api.nxtwash.com:300/api/User/AuthenticateUser';
 const NXT_COUPON_URL = 'https://api.nxtwash.com:300/api/coupons/create';
 const ADMIN_EMAIL = process.env.NXT_ADMIN_EMAIL;
@@ -53,9 +52,19 @@ async function hasUsedPhone(phoneNumber) {
     database_id: NOTION_DB_ID,
     filter: {
       property: 'Phone',
-      phone_number: {
-        equals: phoneNumber
-      }
+      phone_number: { equals: phoneNumber }
+    }
+  });
+  return res.results.length > 0;
+}
+
+// Check if email has already been used
+async function hasUsedEmail(userEmail) {
+  const res = await notion.databases.query({
+    database_id: NOTION_DB_ID,
+    filter: {
+      property: 'Email',
+      email: { equals: userEmail }
     }
   });
   return res.results.length > 0;
@@ -84,25 +93,25 @@ app.post('/generate-coupon', async (req, res) => {
   }
 
   try {
-    // Prevent duplicate phone submissions
+    // Prevent duplicate phone or email submissions
     if (await hasUsedPhone(phoneNumber)) {
-      return res.status(400).json({ message: 'This phone number has already received a coupon.' });
+      return res.status(400).json({ message: 'A coupon has already been requested with this phone number.' });
+    }
+    if (await hasUsedEmail(userEmail)) {
+      return res.status(400).json({ message: 'A coupon has already been requested with this email address.' });
     }
 
+    // Generate coupon
     const { accessToken, key } = await authenticateWithNXT();
     const coupon = await createCoupon(accessToken, key);
 
-    // Prepare and save submission to Notion
+    // Save to Notion
     const notionData = { firstName, lastName, userEmail, phoneNumber, zipCode, couponCode: coupon.couponCode };
     await saveToNotion(notionData);
 
     res.status(200).json(coupon);
   } catch (error) {
     console.error('Error in /generate-coupon:', error.message || error);
-    // Return NXT auth errors or duplication error as JSON
-    if (error.message.includes('already received')) {
-      return res.status(400).json({ message: error.message });
-    }
     res.status(500).json({ message: 'Something went wrong.' });
   }
 });
@@ -110,4 +119,3 @@ app.post('/generate-coupon', async (req, res) => {
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
-
